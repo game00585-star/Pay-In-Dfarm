@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function role() {
+      return profile().role;
+    }
+
+    function branch() {
+      return profile().branch;
+    }
+
+    match /payins/{payinId} {
+      allow read: if signedIn() && (
+        role() in ['Admin', 'Accounting', 'Audit'] ||
+        (role() == 'Branch' && resource.data.branch == branch())
+      );
+      allow create: if signedIn() && role() in ['Admin', 'Branch'];
+      allow update: if signedIn() && role() in ['Admin', 'Branch', 'Accounting'];
+      allow delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if signedIn() && role() in ['Admin', 'Accounting', 'Audit'];
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    match /branches/{branchId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && role() == 'Admin';
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (role() == 'Admin' || request.auth.uid == userId);
+      allow write: if signedIn() && role() == 'Admin';
+      allow delete: if false;
+    }
+  }
+}
